@@ -1,0 +1,4 @@
+C:\Users\Adi\Desktop\Pan-Tompkins-Algorithm-Assembly-master\PanTompkins\bin\Debug\PanTompkins.dll
+C:\Users\Adi\Desktop\Pan-Tompkins-Algorithm-Assembly-master\PanTompkins\bin\Debug\PanTompkins.pdb
+C:\Users\Adi\Desktop\Pan-Tompkins-Algorithm-Assembly-master\PanTompkins\obj\Debug\PanTompkins.dll
+C:\Users\Adi\Desktop\Pan-Tompkins-Algorithm-Assembly-master\PanTompkins\obj\Debug\PanTompkins.pdb
