@@ -25,7 +25,7 @@ namespace PanTompkins
 			//highpass csv
 			try
 			{
-				StreamWriter bw = new StreamWriter( currentDirectory + "highpass.csv");
+				StreamWriter bw = new StreamWriter( currentDirectory + "/highpass.csv");
 
 				for (int i = 0; i < highPass.Length; i++)
 				{
@@ -44,11 +44,30 @@ namespace PanTompkins
 			//bandpass csv
 			try
 			{
-				StreamWriter bw = new StreamWriter(currentDirectory + "band_pass.csv");
+				StreamWriter bw = new StreamWriter(currentDirectory + "/band_pass.csv");
 
 				for (int i = 0; i < lowPass.Length; i++)
 				{
 					bw.WriteLine(Convert.ToString(lowPass[i]));
+				}
+				bw.Close();
+
+			}
+			catch (IOException e)
+			{
+				Console.WriteLine(e.StackTrace);
+			}
+			
+			int[] qrs = QRSDetection(lowPass, nsamp);
+
+			// QRS csv
+			try
+			{
+				StreamWriter bw = new StreamWriter(currentDirectory + "/QRS.csv");
+
+				for (int i = 0; i < qrs.Length; i++)
+				{
+					bw.WriteLine(Convert.ToString(qrs[i]));
 				}
 				bw.Close();
 
@@ -176,62 +195,62 @@ namespace PanTompkins
 
 		}
 
-		//public static int[] QRSDetection(float[] lowPass, int nsamp)
-		//{
-		//	int[] QRS = new int[nsamp];
+		public static int[] QRSDetection(float[] lowPass, int nsamp)
+		{
+			int[] QRS = new int[nsamp];
 
-		//	double threshold = 0;
+			double threshold = 0;
 
-		//	for (int i = 0; i < 200; i++)
-		//	{
-		//		if (lowPass[i] > threshold)
-		//		{
-		//			threshold = lowPass[i];
-		//		}
-		//	}
+			for (int i = 0; i < 200; i++)
+			{
+				if (lowPass[i] > threshold)
+				{
+					threshold = lowPass[i];
+				}
+			}
 
-		//	int frame = 250;
+			int frame = 250;
 
-		//	for (int i = 0; i < lowPass.Length; i += frame)
-		//	{ 
-		//		float max = 0;
-		//		int index = 0;
-		//		if (i + frame > lowPass.Length)
-		//		{ 
-		//			index = lowPass.Length;
-		//		}
-		//		else
-		//		{
-		//			index = i + frame;
-		//		}
-		//		for (int j = i; j < index; j++)
-		//		{
-		//			if (lowPass[j] > max) max = lowPass[j]; 
-		//		}
-		//		Boolean added = false;
-		//		for (int j = i; j < index; j++)
-		//		{
-		//			if (lowPass[j] > threshold && !added)
-		//			{
-		//				QRS[j] = 1; 
+			for (int i = 0; i < lowPass.Length; i += frame)
+			{ 
+				float max = 0;
+				int index = 0;
+				if (i + frame > lowPass.Length)
+				{ 
+					index = lowPass.Length;
+				}
+				else
+				{
+					index = i + frame;
+				}
+				for (int j = i; j < index; j++)
+				{
+					if (lowPass[j] > max) max = lowPass[j]; 
+				}
+				Boolean added = false;
+				for (int j = i; j < index; j++)
+				{
+					if (lowPass[j] > threshold && !added)
+					{
+						QRS[j] = 1; 
 
-		//				added = true;
-		//			}
-		//			else
-		//			{
-		//				QRS[j] = 0;
-		//			}
-		//		}
-		//		Random random = new Random();
+						added = true;
+					}
+					else
+					{
+						QRS[j] = 0;
+					}
+				}
+				Random random = new Random();
 
-		//		double gama = ( random.Next() > 0.5) ? 0.15 : 0.20;
-		//		double alpha = 0.01 + ( random.Next()  * ((0.1 - 0.01)));
+				double gama = ( random.Next() > 0.5) ? 0.15 : 0.20;
+				double alpha = 0.01 + ( random.Next()  * ((0.1 - 0.01)));
 
-		//		threshold = alpha * gama * max + (1 - alpha) * threshold;
-		//	}
+				threshold = alpha * gama * max + (1 - alpha) * threshold;
+			}
 
-		//	return QRS;
-		//}
+			return QRS;
+		}
 
 
 
