@@ -1,8 +1,19 @@
 ﻿<Properties>
   <MonoDevelop.Ide.Workbench ActiveDocument="PanTompkins/QRSDetectionAlgorithm.cs">
     <Files>
-      <File FileName="PanTompkins/QRSDetectionAlgorithm.cs" Line="12" Column="1" />
+      <File FileName="PanTompkins/QRSDetectionAlgorithm.cs" Line="15" Column="3" />
     </Files>
+    <Pads>
+      <Pad Id="ProjectPad">
+        <State name="__root__">
+          <Node name="PanTompkins" expanded="True">
+            <Node name="PanTompkins" expanded="True">
+              <Node name="QRSDetectionAlgorithm.cs" selected="True" />
+            </Node>
+          </Node>
+        </State>
+      </Pad>
+    </Pads>
   </MonoDevelop.Ide.Workbench>
   <MonoDevelop.Ide.Workspace ActiveConfiguration="Debug" />
   <MonoDevelop.Ide.DebuggingService.Breakpoints>

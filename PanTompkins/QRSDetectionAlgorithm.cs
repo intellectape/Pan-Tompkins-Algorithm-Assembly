@@ -6,30 +6,43 @@ namespace PanTompkins
 {
 	public static class QRSDetectionAlgorithm
 	{
-		public static string currentDirectory = System.IO.Directory.GetCurrentDirectory();
-		public static int M = 5;
 
-		public static void doSomething(string filepath)
+		public static int M = 5;
+		public static int N = 30;
+		public static int winSize;
+		public static float HP_CONSTANT = (float)1 / M;
+		public static string currentDirectory = System.IO.Directory.GetCurrentDirectory();
+
+		/// <summary>
+		/// Function to execute the algorithm and produce the result in the current file directory
+		/// </summary>
+		/// <returns>The execute.</returns>
+		/// <param name="filepath">Filepath where the current file to be processed is residing.</param>
+		/// <param name="position">Position of the column in which the heartrate information is saved in the file.</param>
+		/// <param name="windowSize">Window size is the size of the window to consider for the Moving Window filter.</param>
+		public static void execute(string filepath, int position, int windowSize = 230)
 		{
-			List<string> data_list = readDataFromCSV(filepath);
+			winSize = windowSize;
+			List<String> data_list = readDataFromCSV(filepath, position);
 
 			int nsamp = data_list.Count - 2;
-			float[] sig0 = new float[nsamp];
+			float[] ecg = new float[nsamp];
 			for (int i = 2; i < nsamp; i++)
 			{
-				sig0[i - 2] = float.Parse(data_list[i]);
+				ecg[i - 2] = float.Parse(data_list[i]);
 			}
 
-			float[] highPass = highPassFilter(sig0, nsamp);
+			int[] QRS = detect(ecg);
 
-			//highpass csv
+			// Writing the detected data into the file
 			try
 			{
-				StreamWriter bw = new StreamWriter( currentDirectory + "/highpass.csv");
+				var fw = File.OpenWrite(currentDirectory + "/QRS.csv");
+				StreamWriter bw = new StreamWriter(fw);
 
-				for (int i = 0; i < highPass.Length; i++)
+				for (int i = 0; i < QRS.Length; i++)
 				{
-					bw.WriteLine(Convert.ToString(highPass[i]));
+					bw.WriteLine(QRS[i].ToString());
 				}
 				bw.Close();
 
@@ -39,47 +52,12 @@ namespace PanTompkins
 				Console.WriteLine(e.StackTrace);
 			}
 
-			float[] lowPass = lowPassFilter(highPass, nsamp);
-
-			//bandpass csv
-			try
-			{
-				StreamWriter bw = new StreamWriter(currentDirectory + "/band_pass.csv");
-
-				for (int i = 0; i < lowPass.Length; i++)
-				{
-					bw.WriteLine(Convert.ToString(lowPass[i]));
-				}
-				bw.Close();
-
-			}
-			catch (IOException e)
-			{
-				Console.WriteLine(e.StackTrace);
-			}
-			
-			int[] qrs = QRSDetection(lowPass, nsamp);
-
-			// QRS csv
-			try
-			{
-				StreamWriter bw = new StreamWriter(currentDirectory + "/QRS.csv");
-
-				for (int i = 0; i < qrs.Length; i++)
-				{
-					bw.WriteLine(Convert.ToString(qrs[i]));
-				}
-				bw.Close();
-
-			}
-			catch (IOException e)
-			{
-				Console.WriteLine(e.StackTrace);
-			}
 		}
 
-		public static List<string> readDataFromCSV(string filepath)
+		// Function to extract data from the CSV file
+		public static List<string> readDataFromCSV(string filepath, int position)
 		{
+
 			List<string> arrayList = null;
 			try
 			{
@@ -96,7 +74,7 @@ namespace PanTompkins
 						var line = reader.ReadLine();
 						var values = line.Split(',');
 
-						arrayList.Add(values[4]);
+						arrayList.Add(values[position]);
 						line_number++;
 					}
 				}
@@ -106,155 +84,180 @@ namespace PanTompkins
 				Console.WriteLine(e.Message);
 				Console.WriteLine(e.StackTrace);
 			}
-			catch (IOException e) {
+			catch (IOException e)
+			{
 				Console.WriteLine(e.Message);
 				Console.WriteLine(e.StackTrace);
 			}
 
 			return arrayList;
+
 		}
 
-		/// <summary>
-		/// HighPass Filter method for the QRS Detection Algorithm
-		/// </summary>
-		/// <param name="sig0">Sig0.</param>
-		/// <param name="nsamp">Nsamp.</param>
-		public static float[] highPassFilter(float[] sig0, int nsamp)
-		{ 
-			float[] highPass = new float[nsamp];
-			float constant = (float)1 / M;
-
-			for (int i = 0; i < sig0.Length; i++)
-			{ 
-				float y1 = 0;
-				float y2 = 0;
-
-				int y2_index = i - ((M + 1) / 2);
-				if (y2_index < 0)
-				{ 
-					y2_index = nsamp + y2_index;
-				}
-				y2 = sig0[y2_index];
-
-				float y1_sum = 0;
-				for (int j = i; j > i - M; j--)
-				{
-					int x_index = i - (i - j);
-					if (x_index < 0)
-					{
-						x_index = nsamp + x_index;
-					}
-					y1_sum += sig0[x_index];
-				}
-
-				y1 = constant * y1_sum;
-				highPass[i] = y2 - y1;
-			}
-
-			return highPass;
-		}
-
-		/// <summary>
-		/// LowPass Filter method for the QRS Detection Algorithm
-		/// </summary>
-		/// <param name="sig0">Sig0.</param>
-		/// <param name="nsamp">Nsamp.</param>
-		public static float[] lowPassFilter(float[] sig0, int nsamp)
+		// Detection Function for detecting the peaks 
+		public static int[] detect(float[] ecg)
 		{
-			float[] lowPass = new float[nsamp];
-			for (int i = 0; i < sig0.Length; i++)
+			// circular buffer for input ecg signal
+			// we need to keep a history of M + 1 samples for High Pass filter
+			float[] ecg_circ_buff = new float[M + 1];
+			int ecg_circ_WR_idx = 0;
+			int ecg_circ_RD_idx = 0;
+
+			// circular buffer for input ecg signal
+			// we need to keep a history of N+1 samples for Low Pass filter
+			float[] hp_circ_buff = new float[N + 1];
+			int hp_circ_WR_idx = 0;
+			int hp_circ_RD_idx = 0;
+
+			// Low Pass filter outputs a single point for every input point
+			// This goes straight to adaptive filtering for eval
+			float next_eval_pt = 0;
+
+			// output 
+			int[] QRS = new int[ecg.Length];
+
+			// running sums for High Pass and Low Pass filters, values shifted in FILO
+			float hp_sum = 0;
+			float lp_sum = 0;
+
+			// parameters for adaptive thresholding
+			double treshold = 0;
+			Boolean triggered = false;
+			int trig_time = 0;
+			float win_max = 0;
+			int win_idx = 0;
+
+			for (int i = 0; i < ecg.Length; i++)
 			{
-				float sum = 0;
-				if (i + 30 < sig0.Length)
+				ecg_circ_buff[ecg_circ_WR_idx++] = ecg[i];
+				ecg_circ_WR_idx %= (M + 1);
+
+				/* High pass filtering */
+				if (i < M)
 				{
-					for (int j = i; j < i + 30; j++)
-					{
-						float current = sig0[j] * sig0[j]; 
-						sum += current;
-					}
-				}
-				else if (i + 30 >= sig0.Length)
-				{ 
-					int over = i + 30 - sig0.Length;
-					for (int j = i; j < sig0.Length; j++)
-					{
-						float current = sig0[j] * sig0[j];
-						sum += current;
-					}
-					for (int j = 0; j < over; j++)
-					{
-						float current = sig0[j] * sig0[j];
-						sum += current;
-					}
-				}
-
-				lowPass[i] = sum;
-			}
-
-			return lowPass;
-
-		}
-
-		public static int[] QRSDetection(float[] lowPass, int nsamp)
-		{
-			int[] QRS = new int[nsamp];
-
-			double threshold = 0;
-
-			for (int i = 0; i < 200; i++)
-			{
-				if (lowPass[i] > threshold)
-				{
-					threshold = lowPass[i];
-				}
-			}
-
-			int frame = 250;
-
-			for (int i = 0; i < lowPass.Length; i += frame)
-			{ 
-				float max = 0;
-				int index = 0;
-				if (i + frame > lowPass.Length)
-				{ 
-					index = lowPass.Length;
+					// first fill buffer with enough points for High Pass filter
+					hp_sum += ecg_circ_buff[ecg_circ_RD_idx];
+					hp_circ_buff[hp_circ_WR_idx] = 0;
 				}
 				else
 				{
-					index = i + frame;
-				}
-				for (int j = i; j < index; j++)
-				{
-					if (lowPass[j] > max) max = lowPass[j]; 
-				}
-				Boolean added = false;
-				for (int j = i; j < index; j++)
-				{
-					if (lowPass[j] > threshold && !added)
+					hp_sum += ecg_circ_buff[ecg_circ_RD_idx];
+
+					int tmp = ecg_circ_RD_idx - M;
+					if (tmp < 0)
 					{
-						QRS[j] = 1; 
-
-						added = true;
+						tmp += M + 1;
 					}
-					else
+					hp_sum -= ecg_circ_buff[tmp];
+
+					float y1 = 0;
+					float y2 = 0;
+
+					tmp = (ecg_circ_RD_idx - ((M + 1) / 2));
+					if (tmp < 0)
 					{
-						QRS[j] = 0;
+						tmp += M + 1;
+					}
+					y2 = ecg_circ_buff[tmp];
+
+					y1 = HP_CONSTANT * hp_sum;
+
+					hp_circ_buff[hp_circ_WR_idx] = y2 - y1;
+				}
+
+				ecg_circ_RD_idx++;
+				ecg_circ_RD_idx %= (M + 1);
+
+				hp_circ_WR_idx++;
+				hp_circ_WR_idx %= (N + 1);
+
+				/* Low pass filtering */
+
+				// shift in new sample from high pass filter
+				lp_sum += hp_circ_buff[hp_circ_RD_idx] * hp_circ_buff[hp_circ_RD_idx];
+
+				if (i < N)
+				{
+					// first fill buffer with enough points for Low Pass filter
+					next_eval_pt = 0;
+
+				}
+				else
+				{
+					// shift out oldest data point
+					int tmp = hp_circ_RD_idx - N;
+					if (tmp < 0)
+					{
+						tmp += N + 1;
+					}
+					lp_sum -= hp_circ_buff[tmp] * hp_circ_buff[tmp];
+
+					next_eval_pt = lp_sum;
+				}
+
+				hp_circ_RD_idx++;
+				hp_circ_RD_idx %= (N + 1);
+
+				/* Adapative thresholding beat detection */
+				// set initial threshold				
+				if (i < winSize)
+				{
+					if (next_eval_pt > treshold)
+					{
+						treshold = next_eval_pt;
 					}
 				}
-				Random random = new Random();
 
-				double gama = ( random.Next() > 0.5) ? 0.15 : 0.20;
-				double alpha = 0.01 + ( random.Next()  * ((0.1 - 0.01)));
+				// check if detection hold off period has passed
+				if (triggered)
+				{
+					trig_time++;
 
-				threshold = alpha * gama * max + (1 - alpha) * threshold;
+					if (trig_time >= 100)
+					{
+						triggered = false;
+						trig_time = 0;
+					}
+				}
+
+				// find if we have a new max
+				if (next_eval_pt > win_max) win_max = next_eval_pt;
+
+				// find if we are above adaptive threshold
+				if (next_eval_pt > treshold && !triggered)
+				{
+					QRS[i] = 1;
+
+					triggered = true;
+				}
+				else
+				{
+					QRS[i] = 0;
+				}
+
+				// adjust adaptive threshold using max of signal found 
+				// in previous window            
+				if (++win_idx > winSize)
+				{
+					// weighting factor for determining the contribution of
+					// the current peak value to the threshold adjustment
+					double gamma = 0.175;
+
+					Random random = new Random();
+
+					// forgetting factor - 
+					// rate at which we forget old observations
+					double alpha = 0.01 + (random.Next() * ((0.1 - 0.01)));
+
+					treshold = alpha * gamma * win_max + (1 - alpha) * treshold;
+
+					// reset current window ind
+					win_idx = 0;
+					win_max = -10000000;
+				}
 			}
 
 			return QRS;
 		}
-
-
-
 	}
-
 }
-
